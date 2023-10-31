@@ -48,10 +48,9 @@ class MakeGraph:
             df_tmp = pd.read_csv(os.path.join(self.folder_name, file_name))
             file_type = file_name.replace('.csv', '')
 
+            print(file_name)
             # 時間を0から始める
             df_tmp['time'] = (df_tmp['time'] - df_tmp['time'][0]) / 1000
-
-            print(file_name)
 
             match file_type:
                 case 'acc':
@@ -201,3 +200,88 @@ class MakeGraph:
         split_time_list = split_time_list[
             (split_time_list['time'] >= start_time) & (split_time_list['time'] <= end_time)]
         return split_time_list
+
+    """
+    csvを出力する
+    @param list データフレーム
+    @param file_name ファイル名
+    """
+    def output_csv(self, output_list: pd.DataFrame, file_name: str) -> None:
+        # indexも出力する
+        output_list.to_csv('../data/output/' + file_name + '.csv', index=True)
+
+    """
+    周波数成分を計算する
+    @param list データフレーム
+    @param filter_num フィルタ数
+    @return 周波数成分のデータフレーム
+    """
+    def __fft(self, fft_list: pd.DataFrame, filter_num: int) -> pd.DataFrame:
+        tmp_list = pd.DataFrame()
+
+        # window_sizeで指定した範囲で計算して、終わったら、次の範囲に移動する
+        for i in range(0, len(fft_list), filter_num):
+            for column in fft_list:
+                if column == 'time':
+                    continue
+                # FFTを計算
+
+                N = len(fft_list[column][i:i + filter_num])  # サンプル数
+                dt = 1 / self.calculate_sampling_frequency(fft_list[column][i:i + filter_num])  # サンプリング間隔
+
+                y_fft = np.fft.fft(fft_list[column][i:i + filter_num])  # 離散フーリエ変換
+                freq = np.fft.fftfreq(N, d=dt)  # 周波数を割り当てる（※後述）
+                Amp = abs(y_fft / (N / 2))  # 音の大きさ（振幅の大きさ）
+
+                # 最大の周波数成分のインデックスを取得
+                index = np.argmax(Amp[1:int(N / 2)])
+
+                # 最大の周波数成分を取得
+                tmp_list.loc[i, column + '_fft'] = freq[index]
+
+                # 最大の周波数成分の振幅を取得
+                tmp_list.loc[i, column + '_fft_amp'] = Amp[index]
+
+                # 最大の周波数成分の位相を取得
+                tmp_list.loc[i, column + '_fft_phase'] = np.angle(y_fft[index])
+
+                # 最大の周波数成分の周波数を取得
+                tmp_list.loc[i, column + '_fft_freq'] = freq[index] * self.calculate_sampling_frequency(fft_list[column][i:i + filter_num])
+
+
+        return tmp_list
+
+    """
+    平均・分散・最大値・最小値・中央値・四分位数・標準偏差を計算する
+    範囲はwindow_sizeで指定する
+    @param list データフレーム
+    @param filter_num フィルタ数
+    @return 平均・分散・最大値・最小値・中央値・四分位数・標準偏差のデータフレーム
+    """
+    def calc(self, calc_list: pd.DataFrame, filter_num: int) -> pd.DataFrame:
+        tmp_list = pd.DataFrame()
+
+        # window_sizeで指定した範囲で計算して、終わったら、次の範囲に移動する
+        for i in range(0, len(calc_list), filter_num):
+            for column in calc_list:
+                if column == 'time':
+                    continue
+                # 平均、標準偏差、最小値、第1四分位数、中央値（第2四分位数）、第3四分位数、最大値などを計算する
+                tmp_list.loc[i, column + '_mean'] = calc_list[column][i:i + filter_num].mean()
+                tmp_list.loc[i, column + '_std'] = calc_list[column][i:i + filter_num].std()
+                tmp_list.loc[i, column + '_min'] = calc_list[column][i:i + filter_num].min()
+                tmp_list.loc[i, column + '_25%'] = calc_list[column][i:i + filter_num].quantile(0.25)
+                tmp_list.loc[i, column + '_50%'] = calc_list[column][i:i + filter_num].quantile(0.5)
+                tmp_list.loc[i, column + '_75%'] = calc_list[column][i:i + filter_num].quantile(0.75)
+                tmp_list.loc[i, column + '_max'] = calc_list[column][i:i + filter_num].max()
+
+        return tmp_list
+
+    """
+    サンプリング周波数を計算する
+    """
+    def calculate_sampling_frequency(self,data: pd.DataFrame) -> float:
+        time_stamps = [data_point for data_point in data]
+        time_interval = time_stamps[-1] - time_stamps[0]
+        sampling_frequency = 1 / (time_interval / len(data))
+        return sampling_frequency
