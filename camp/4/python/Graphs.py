@@ -45,6 +45,10 @@ class MakeGraph:
         plt.rcParams['font.family'] = "IPAexGothic"
 
         for file_name in self.file_names:
+            # .DS_Storeを除外
+            if file_name == '.DS_Store':
+                continue
+
             df_tmp = pd.read_csv(os.path.join(self.folder_name, file_name))
             file_type = file_name.replace('.csv', '')
 
